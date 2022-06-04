@@ -1,0 +1,579 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <title>
+      Synchronize MapView and SceneView | Sample | ArcGIS API for JavaScript
+      4.23
+    </title>
+	<link rel="stylesheet" href="https://js.arcgis.com/4.23/esri/themes/dark/main.css" />
+
+    <style>
+      html,
+      body {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+		width: 100%;
+      }
+	#mapswitchToggle {
+				top: 10px;
+				left: 60px;
+				position: absolute;
+				z-index: 99;
+				background-color: white;
+				border-radius: 8px;
+				padding: 10px;
+				opacity: 0.75;
+			}
+	#box {
+	        text-align: center;
+	        background: white;
+	        padding: 20px;
+	        width: 300px;
+	      }
+	#viewinfo {
+		bottom: 20px;
+		right: 20px;
+		position: absolute;
+		z-index: 99;
+		background-color: white;
+		border-radius: 8px;
+		padding: 10px;
+		opacity: 0.75;
+	}
+	#SampleWorldCitiesToggle {
+		top: 0px;
+		right: 20px;
+		position: absolute;
+		z-index: 99;
+		background-color: white;
+		border-radius: 8px;
+		padding: 10px;
+		opacity: 0.75;
+	}
+	.btn-switch:hover{
+		background-color:rgb(239, 239, 239);	
+	}
+	  
+    </style>
+
+    <link
+      rel="stylesheet"
+      href="https://js.arcgis.com/4.23/esri/themes/light/main.css"
+    />
+    <script src="https://js.arcgis.com/4.23/"></script>
+
+    <script>
+	  var chkMapView = false, chkSceneView = false;//初始两视图的漫游状态均为false
+      require(["esri/config","esri/Map","esri/layers/FeatureLayer","esri/layers/SceneLayer", "esri/views/MapView","esri/views/SceneView","esri/widgets/Expand","esri/widgets/Weather","esri/widgets/Daylight",
+		"esri/renderers/DotDensityRenderer","esri/widgets/Legend","esri/widgets/Bookmarks",
+		"esri/layers/GraphicsLayer", "esri/Graphic","esri/symbols/SimpleMarkerSymbol","esri/symbols/SimpleFillSymbol","esri/geometry/geometryEngine",
+		"dojo/on",
+		"dojo/dom",
+		"dojo/domReady!"], (
+		esriConfig,Map,FLayers,SceneLayer,MapView,SceneView,Expand, Weather, Daylight,
+		DotDensityRenderer,Legend,Bookmarks,
+		GraphicsLayer,Graphic,SimpleMarkerSymbol,SimpleFillSymbol,geometryEngine,on,dom
+      ) => {
+		esriConfig.apiKey = "AAPK56e3ac027f044c4089d8ceec232fc05dYaOuzVRzm8tMRqvzOvDvIEevbqJ85yppn9PacU6cy4duurJrVK9wo_8BcWO8i8bi";
+        const map = new Map({
+          basemap: "gray",
+		  //ground: "world-elevation"
+        });
+		// Load the sceneLayer with the 3D buildings from San Francisco
+		  const sceneLayer = new SceneLayer({
+			//url:"https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/New_York_LoD2_3D_Buildings/SceneServer?cacheKey=bbd7ddf66696c57b",
+			url: "https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/SanFrancisco_Bldgs/SceneServer/layers/0",
+			title: "San Francisco Downtown",
+			popupEnabled: false
+		  });
+		  //map.add(sceneLayer);
+
+        const view1 = new SceneView({
+          container: "view1Div",
+          map: map,
+		  camera: {
+		            position: {
+		              longitude: -122.36907,
+		              latitude: 37.6755,
+		              z: 1800//缩放因子
+		            },
+		            heading: 333.84,
+		            tilt: 75//倾斜度
+		    },
+			qualityProfile: "high",
+			environment: {
+			  atmosphere: {
+				quality: "high"
+			  },
+			  weather: { type: "cloudy", cloudCover: 0.6 } // autocasts to new CloudyWeather({ cloudCover: 0.6 })
+			},
+        });
+		view1.map.add(sceneLayer);
+	//**************************底图切换*************************************************
+		var basemaps = document.getElementsByName('Basemap');
+		basemaps[0].onclick= function(){
+			map.basemap="gray";
+		};
+		basemaps[1].onclick= function(){
+			map.basemap="satellite";
+		};
+		basemaps[2].onclick= function(){
+			map.basemap="osm";
+		};
+	//**************************天气模拟小部件*************************************************
+		const weatherExpand = new Expand({
+			view: view1,
+			content: new Weather({
+			  view: view1
+			}),
+			group: "top-right",
+			expanded: true
+		});
+		const daylightExpand = new Expand({
+	          view: view1,
+	          content: new Daylight({
+	            view: view1
+	          }),
+	          group: "top-right"
+	        });
+	    view1.ui.add([weatherExpand, daylightExpand], "top-right");
+			  
+		// Animation to let the fog slowly appear
+		  function animation() {
+			view1.environment.weather.fogStrength += 0.015; // Increase the fogStrength by a small amount
+			// Continue animating until the fogStrength is 0.8
+			if (view1.environment.weather.fogStrength < 0.8) {
+			  requestAnimationFrame(animation);
+			}
+		  }
+
+        const view2 = new MapView({
+          container: "view2Div",
+          map: map,
+          highlightOptions: {
+            fillOpacity: 0,
+            color: [50, 50, 50]
+          },
+          popup: {
+            dockEnabled: true,
+            dockOptions: {
+              position: "top-right",
+              breakpoint: false
+            }
+          },
+
+        });
+		
+	//**************************地图比例尺与实时坐标显示信息*************************************************
+		view2.watch(["stationary"], function() {//当stationary静止使显示中心经纬度
+			showInfo(view2.center);
+		});
+		view2.on(["pointer-move"], function(evt) {//当指针移动时,实时显示经纬度
+			showInfo(view2.toMap({
+				x: evt.x,
+				y: evt.y,
+				
+			}));
+		});
+		function showInfo(pt) {
+			document.getElementById("scaleDisplay").textContent = "比例尺：1:" + Math.round(view2.scale);//round:四舍五入
+			document.getElementById("coordinateDisplay").textContent = "longitude：" + pt.longitude.toFixed(2) + ", latitude：" + pt.latitude
+				.toFixed(2);
+		}
+	
+	//**************************美国种族密度显示*************************************************
+		view2.when().then(() => {
+		  const dotDensityRenderer = new DotDensityRenderer({
+		    dotValue: 100,
+		    outline: null,
+		    referenceScale: 577790,  // 1:577,790 view scale
+		    legendOptions: {
+		      unit: "people"
+		    },
+		    attributes: [
+		      {
+		        field: "B03002_003E",
+		        color: "#f23c3f",
+		        label: "White (non-Hispanic)"
+		      },
+		      {
+		        field: "B03002_012E",
+		        color: "#e8ca0d",
+		        label: "Hispanic"
+		      },
+		      {
+		        field: "B03002_004E",
+		        color: "#00b6f1",
+		        label: "Black or African American"
+		      },
+		      {
+		        field: "B03002_006E",
+		        color: "#32ef94",
+		        label: "Asian"
+		      },
+		      {
+		        field: "B03002_005E",
+		        color: "#ff7fe9",
+		        label: "American Indian/Alaskan Native"
+		      },
+		      {
+		        field: "B03002_007E",
+		        color: "#e2c4a5",
+		        label: "Pacific Islander/Hawaiian Native"
+		      },
+		      {
+		        field: "B03002_008E",
+		        color: "#ff6a00",
+		        label: "Other race"
+		      },
+		      {
+		        field: "B03002_009E",
+		        color: "#96f7ef",
+		        label: "Two or more races"
+		      }
+		    ]
+		  });
+		    
+		  const pop = new FLayers({
+		    url: "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/ACS_Population_by_Race_and_Hispanic_Origin_Boundaries/FeatureServer/2",
+			id:"pop",
+			visible:false,
+			minScale: 4000000000000,
+		    maxScale: 5000,
+		    title: "Current Population Estimates (ACS)",
+		    popupTemplate: {
+		      title: "{County}, {State}",
+		      content: [
+		        {
+		          type: "fields",
+		          fieldInfos: [
+		            {
+		              fieldName: "B03002_003E",
+		              label: "White (non-Hispanic)",
+		              format: {
+		                digitSeparator: true,
+		                places: 0
+		              }
+		            },
+		            {
+		              fieldName: "B03002_012E",
+		              label: "Hispanic",
+		              format: {
+		                digitSeparator: true,
+		                places: 0
+		              }
+		            },
+		            {
+		              fieldName: "B03002_004E",
+		              label: "Black or African American",
+		              format: {
+		                digitSeparator: true,
+		                places: 0
+		              }
+		            },
+		            {
+		              fieldName: "B03002_006E",
+		              label: "Asian",
+		              format: {
+		                digitSeparator: true,
+		                places: 0
+		              }
+		            },
+		            {
+		              fieldName: "B03002_005E",
+		              label: "American Indian/Alaskan Native",
+		              format: {
+		                digitSeparator: true,
+		                places: 0
+		              }
+		            },
+		            {
+		              fieldName: "B03002_007E",
+		              label: "Pacific Islander/Hawaiian Native",
+		              format: {
+		                digitSeparator: true,
+		                places: 0
+		              }
+		            },
+		            {
+		              fieldName: "B03002_008E",
+		              label: "Other race",
+		              format: {
+		                digitSeparator: true,
+		                places: 0
+		              }
+		            },
+		            {
+		              fieldName: "B03002_009E",
+		              label: "Two or more races",
+		              format: {
+		                digitSeparator: true,
+		                places: 0
+		              }
+		            }
+		          ]
+		        }
+		      ]
+		    },
+		    renderer: dotDensityRenderer
+		  });
+		
+		  //map.add(pop);
+		  //人口密度图层标签
+		  var popToggle = document.getElementById("pop");
+		  popToggle.addEventListener("change", function() {
+		  	pop.visible = popToggle.checked;
+		  	if (popToggle.checked == true) {
+		  		view2.map.add(pop);
+		  	} else {
+		  		view2.map.remove(pop);
+		  	}
+		  });
+		
+		  view2.ui.add(
+		    [
+		      new Expand({
+		        view: view2,
+		        content: new Legend({ view: view2 }),
+		        group: "top-left",
+		        expanded: true
+		      }),
+		    ],
+		    "top-left"
+		  );
+		});
+	//**************************专题图的动态加载与图层数量显示*************************************************
+		//专题图层一
+		var SampleWorldCities = new FLayers({	
+			url:"https://sampleserver6.arcgisonline.com/arcgis/rest/services/SampleWorldCities/MapServer/0",
+			id: "streets",
+			visible: false
+		});
+		//专题图层二
+		var Earthquakes_Since1970 = new FLayers({	
+			url :"https://sampleserver6.arcgisonline.com/arcgis/rest/services/Earthquakes_Since1970/FeatureServer",
+			id: "ny-housing",
+			visible: false
+		});
+
+		//世界点图层标签
+		var SampleWorldCitiesToggle = document.getElementById("SampleWorldCities");
+		SampleWorldCitiesToggle.addEventListener("change", function() {
+			SampleWorldCities.visible = SampleWorldCitiesToggle.checked;
+			if (SampleWorldCitiesToggle.checked == true) {
+				view2.map.add(SampleWorldCities);
+			} else {
+				view2.map.remove(SampleWorldCities);
+			}
+		
+		});
+		//地震点图层标签
+		var Earthquakes_Since1970Toggle = document.getElementById("Earthquakes_Since1970");
+		Earthquakes_Since1970Toggle.addEventListener("change", function() {
+			Earthquakes_Since1970.visible = Earthquakes_Since1970Toggle.checked;
+			if (Earthquakes_Since1970Toggle.checked == true) {
+				view2.map.add(Earthquakes_Since1970);
+			} else {
+				view2.map.remove(Earthquakes_Since1970);
+			}
+		});
+	//**************************两窗口联动*************************************************
+	    const views = [view1, view2];
+	    let active;
+	
+	    const sync = (source) => {
+	      if (!active || !active.viewpoint || active !== source) {
+	        return;
+	      }
+	
+	      for (const view of views) {
+	        if (view !== active) {
+	          view.viewpoint = active.viewpoint;
+	        }
+	      }
+	    };
+	
+	    for (const view of views) {
+	      view.watch(["interacting", "animation"], () => {
+	        active = view;
+	        sync(active);
+	      });
+	
+	      view.watch("viewpoint", () => sync(view));
+	    }
+	//**************************地图缓冲区构建*************************************************
+		var polySym = new SimpleFillSymbol({
+		  color: [140, 140, 222, 0.5],
+		  outline: {
+		    color: [0, 0, 0, 0.5],
+		    width: 2
+		  }
+		});
+		var pointSym = new SimpleMarkerSymbol({
+		  color: [255, 0, 0],
+		  outline: {
+		    color: [255, 255, 255],
+		    width: 1
+		  },
+		  size: 7
+		});
+			
+		var bufferLayer = new GraphicsLayer();
+		var pointLayer = new GraphicsLayer();
+			
+		map.addMany([bufferLayer, pointLayer]);
+		//view2.map.addMany([bufferLayer, pointLayer]);
+			
+		view2.on('drag', function(evt) {
+			if(evt.button==2){
+				if (!chkMapView) {
+				  evt.stopPropagation();
+				  var point = view2.toMap({
+				    x: evt.x,
+				    y: evt.y
+				  });
+				  if (point) {
+				    bufferPoint(point);
+				  }
+				}
+				else if (chkMapView) {
+				  clearGraphics();
+				}
+			}
+			else if(evt.button==1){
+				clearGraphics();
+			}
+		});
+		
+		view1.on('drag', function(evt) {
+		  if(evt.button==2){
+			  if (!chkSceneView) {
+			    evt.stopPropagation();
+			    var point = view1.toMap({
+			      x: evt.x,
+			      y: evt.y
+			    });
+			    if (point) {
+			      point.hasZ = false;
+			      point.z = undefined;
+			      bufferPoint(point);
+			    }
+			  }
+			  else if (chkSceneView) {
+			    clearGraphics();
+			  }
+		  }
+		  else if(evt.button==1){
+		  	clearGraphics();
+		  }
+		});
+		view2.on("click", function(evt) {
+		  if(evt.button==2){
+			  if (!chkMapView) {
+			    if (evt.mapPoint) {
+			      bufferPoint(evt.mapPoint);
+			    }
+			  }
+			  else if (chkMapView) {
+			    clearGraphics();
+			  }
+		  }
+		  else if(evt.button==1){
+		  	clearGraphics();
+		  }
+		});
+		
+		view1.on('click', function(evt) {
+		  if(evt.button==2){
+			  if (!chkSceneView) {
+			    if (evt.mapPoint) {
+			      evt.mapPoint.hasZ = false;
+			      evt.mapPoint.z = undefined;
+			      bufferPoint(evt.mapPoint);
+			    }
+			  }
+			  else if (chkSceneView) {
+			    clearGraphics();
+			  }
+		  }
+		  else if(evt.button==1){
+		  	clearGraphics();
+		  }
+		});
+		
+		function bufferPoint(point) {
+		  clearGraphics();
+		
+		  pointLayer.add(new Graphic({
+		    geometry: point,
+		    symbol: pointSym
+		  }));
+		  var buffer = geometryEngine.geodesicBuffer(point, 1, "kilometers");//缓冲区半径
+		    bufferLayer.add(new Graphic({
+		      geometry: buffer,
+		      symbol: polySym
+		    }));
+		  }
+		  
+		function clearGraphics() {
+			pointLayer.removeAll();
+			bufferLayer.removeAll();
+		}
+			
+		on(dom.byId("chkBoxMap"), "click", function(evt) {
+		  if(evt.button==2){
+			 chkMapView = dom.byId("chkBoxMap").checked;
+			 if (chkMapView) {
+			   clearGraphics();
+			 } 
+		  }
+		  else if(evt.button==1){
+		  	clearGraphics();
+		  }
+		});
+		
+		on(dom.byId("chkBoxScene"), "click", function(evt) {
+			if(evt.button==2){
+				chkSceneView = dom.byId("chkBoxScene").checked;
+				if (chkSceneView) {
+				  clearGraphics();
+				}
+			}
+			else if(evt.button==1){
+				clearGraphics();
+			}
+		});
+      });
+    </script>
+  </head>
+  <body>
+    <div id="view1Div" style="float: left; width: 45%; height: 100%"></div>
+    <div id="view2Div" style="float: left; width: 55%; height: 100%"></div>
+	<span id="mapswitchToggle">
+		<section class="header">
+			<div id="btns">
+				<div>底图切换</div>
+				<label class="btn-switch" name="Basemap" value="gray">gray</label>
+				</br>
+				<label class="btn-switch" name="Basemap" value="satellite">satellite</label>
+				</br>
+				<label class="btn-switch" name="Basemap" value="osm">osm</label>
+			</div>
+		</section>
+	</span>
+	<span id="viewinfo" class="esri-widget">
+		<div id="scaleDisplay"></div>
+		<div id="coordinateDisplay"></div>
+	</span>
+	<span id="SampleWorldCitiesToggle" class="esri-widget">
+		<input type="checkbox" id="SampleWorldCities">SampleWorldCities<br>
+		<input type="checkbox" id="Earthquakes_Since1970">Earthquakes_Since1970<br>
+		<input type="checkbox" id="pop">Population_Race
+	</span>
+  </body>
+</html>
